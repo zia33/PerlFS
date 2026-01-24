@@ -1,0 +1,30 @@
+How to run the FUSE FILESYSTEM::
+
+sudo perl     -I../localFuse/lib/perl5     -I../localFuse/lib/perl5/aarch64-linux-gnu-thread-multi     -f ~/localFuse/myfs.pl     ~/newmount
+
+
+_______________________________________________________________________
+
+
+Check if the Fuse.so is built with the right Linux Fuse libraries:
+
+
+ldd ../localFuse/lib/perl5/aarch64-linux-gnu-thread-multi/auto/Fuse/Fuse.so 
+
+Must be Fuse Library 2.9 lower than the 3.0 version as 3.0 is not working at all.
+_______________________________________________________________________
+
+
+How to MAKE the Fuse-0.16 version for PERL Fuse
+
+perl Makefile.PL   INC=-I/usr/include/fuse   LIBS='-L/usr/lib/aarch64-linux-gnu -lfuse'   OPTIMIZE='-Wl,-rpath,/usr/lib/aarch64-linux-gnu'   INSTALL_BASE=../localFuse
+
+
+The W is followed by an EL 'l' in the above  ^^
+
+perl Makefile.PL   INC=-I/usr/include/fuse   LIBS='-L/usr/lib/aarch64-linux-gnu -lfuse'   OPTIMIZE='-Wl,-rpath,/usr/lib/aarch64-linux-gnu'   INSTALL_BASE=../localFuse        ________________________________________________________________________
+
+
+make
+make install
+________________________________________________________________________
