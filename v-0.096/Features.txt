@@ -1,0 +1,103 @@
+This source code implements a **Journaled Pass-through Filesystem** using Perl and FUSE.
+
+While your previous example was a simple "Hello World" in-memory filesystem, this script is significantly more advanced. It acts as a "wrapper" or "proxy" around an existing directory on your hard drive (the `$ROOT`), adding a layer of **crash consistency** via a Write-Ahead Log (WAL).
+
+Here is a breakdown of its core components and logic:
+
+### 1. The "Pass-through" Logic
+
+The script takes an existing directory (the `--root`) and mirrors it to a new location (the `mountpoint`).
+
+* When you `ls` the mountpoint, the Perl script's `readdir` function is called.
+* The script uses `fs_realpath` to calculate where that file lives in the actual `$ROOT` folder.
+* It performs the operation on the real disk and returns the result back to the user through the FUSE mount.
+
+### 2. Journaling (The "Write-Ahead Log")
+
+The most sophisticated part of this script is the **Journaling system**. This is designed to prevent data loss or corruption if the script crashes or the power goes out.
+
+* **Recording:** Before any modifying operation (like `write`, `mkdir`, or `unlink`) is actually performed on the real disk, the script calls `journal_record`.
+* **The WAL File:** It saves the intended operation as a JSON string in a hidden file called `.perlfs_journal` inside your root directory.
+* **Persistence:** It uses `fsync` to ensure the journal entry is physically written to the disk platter/SSD before the actual file change happens.
+
+### 3. Crash Recovery (`replay_journal`)
+
+When the script starts up, the first thing it does is check for the existence of that journal file.
+
+* If the file exists and has content, it means the script crashed previously *after* logging an intent but *before* completing the work.
+* `replay_journal` reads the JSON records and performs the operations (e.g., finishes a write or a rename) to ensure the filesystem is in a consistent state.
+
+### 4. Path Security (`fs_realpath`)
+
+The script includes a security function to prevent **Path Traversal** attacks.
+
+* If a user tries to access `../../etc/passwd` through the mountpoint, the `fs_realpath` function detects that the resolved path is outside the allowed `$ROOT` and `die`s. This is a critical security feature for filesystems.
+
+### 5. The Test Harness (`--test`)
+
+Unlike a standard FUSE script, this one has a built-in interactive shell.
+
+* By running with `--test`, you can simulate filesystem commands (`ls`, `write`, `cat`) inside the terminal.
+* This allows the developer to debug the logic (and the journaling) without actually having to mount the filesystem to the Linux kernel, which can be difficult to debug if things go wrong.
+
+### Summary of Features
+
+| Feature | Functionality |
+| --- | --- |
+| **Transparency** | Mirrors an existing directory. |
+| **Durability** | Uses a JSON-based journal to survive crashes. |
+| **Security** | Constrains all operations to a specific root directory. |
+| **Observability** | Includes a `--debug` mode for verbose logging. |
+| **Simulated Environment** | Includes a `--test` harness for CLI-based testing. |
+
+This is essentially a "Pro" version of a FUSE script, demonstrating how you can use Perl to add high-level features like journaling to a standard filesystem.
+
+_____________________________________________________________________________________
+Think of this code as a **"Security Guard for your Data."** While a normal folder just stores files, this Perl script creates a "Smart Mirror" folder that acts as a protective layer between you and your hard drive.
+
+Here is a breakdown of how it works, using concepts you'll likely run into in your first year of Computer Science.
+
+### 1. The "Mirror" Effect (Pass-through)
+
+Imagine you have a messy folder called `Real_Files`. You use this script to create a clean-looking "Virtual Folder" called `Safe_Mount`.
+
+* When you save a photo into `Safe_Mount`, the Perl script catches it.
+* It checks the path, makes sure everything is legal, and then tucks the photo away inside `Real_Files`.
+* This is called a **Pass-through Filesystem**. The user sees the virtual version, but the script handles the "real" version behind the scenes.
+
+### 2. The "Undo/Redo" Log (Journaling)
+
+This is the most "Pro" feature of the code. In CS, we call this a **Write-Ahead Log (WAL)**.
+
+* **The Problem:** If you are saving a huge file and your laptop dies halfway through, that file might get corrupted.
+* **The Solution:** Before the script does *anything* to your real files, it writes a "Sticky Note" in a hidden file (`.perlfs_journal`).
+* It says: *"I am about to write 50MB of data to file X."* * Only **after** the note is safely written does it start the actual save. If the computer crashes, the script looks at its notes when it reboots and says, *"Oh, I didn't finish that job! Let me fix it now."* This is what the `replay_journal` function does.
+
+### 3. The "Digital Boundary" (Path Normalization)
+
+The script includes a function called `fs_realpath`. This is basically a **Security Perimeter**.
+
+* Hackers often try to use "Path Traversal" (using `../../` to sneak out of a folder and into your system settings).
+* This script is smart. It calculates exactly where a path leads. If it realizes you are trying to "escape" the allowed root folder, it triggers a security "die" command and shuts the operation down. It's like a guard dog that won't let you leave the backyard.
+
+### 4. The "Translation Layer" (Callbacks)
+
+You’ll see a bunch of functions like `getattr`, `readdir`, and `read`. These are **Callbacks**.
+
+* These functions act as a translator between the **Linux Kernel** (which talks in low-level C code) and your **Perl Script** (which is high-level and easy to read).
+* When you click "New Folder" in your OS, the Kernel sends a signal. The FUSE module hears it and "calls back" the `mkdir` function in the Perl script.
+
+### 5. The "Practice Field" (Test Harness)
+
+Programming is 10% writing code and 90% fixing it. The script includes a `--test` mode.
+
+* Instead of mounting the filesystem to your actual computer (which can be risky if there’s a bug), it opens a custom command prompt.
+* You can type `ls`, `mkdir`, or `write` directly into the terminal to see how the script reacts. It’s a **Sandbox** that lets you break things safely without crashing your entire operating system.
+
+### Why does this matter?
+
+For a young developer, this script is a great example of **Middleware**. It shows that you don't have to be a Kernel Engineer to build filesystem tools. You can use a flexible language like Perl to build a system that is:
+
+1. **Consistent** (doesn't lose data).
+2. **Secure** (blocks unauthorized access).
+3. **Transparent** (works like a normal folder to the user).
