@@ -1,0 +1,37 @@
+PerlFS: Advanced FUSE Implementation AnalysisPerlFS is a high-level, journaling pass-through filesystem built using the Perl Fuse module. 
+It is designed to provide a secure, crash-consistent interface to an existing directory on the host system.
+
+1. Core Architecture
+Language: Perl 5 with POSIX and FUSE bindings.
+Backing Store: A "Pass-through" model where operations are translated and executed on a physical $ROOT directory.
+Event-Driven: Uses FUSE callbacks to intercept system calls (e.g., mkdir, read, write) from the OS kernel.
+
+2. Key Features
+A. Data Integrity & Crash Consistency (Journaling)
+Write-Ahead Log (WAL): Before any modification is made to the real disk, a record is written to .perlfs_journal.
+CRC-32 Verification: Each journal entry includes a Cyclic Redundancy Check (CRC) to detect data corruption within the log itself.
+Atomic Replay: On startup, the replay_journal function scans for unfinished business. It uses an idempotent logic (if a file was already created, it won't fail trying again) to ensure the system reaches a consistent state after a crash.
+Batching & Fsync: Implements a JOURNAL_BATCH_SIZE to balance performance and safety, ensuring the journal is physically flushed to the disk platter using POSIX::fsync.
+
+B. Security & Sandbox Enforcement
+Canonical Path Resolution: Uses abs_path and fs_realpath to resolve every path to its absolute physical location.
+Path Escape Prevention: Explicitly blocks "Path Traversal" attacks (e.g., ../../etc/passwd). It verifies that the resolved path still starts with the defined $ROOT string.
+Idempotent Operations: Modification functions check the state of the real disk before applying journaled changes to avoid accidental double-writes or errors.
+
+C. Resource Management
+Journal Rotation: Monitors the size of the journal file. If it exceeds MAX_JOURNAL_SIZE (100MB), it automatically rotates the file to prevent disk exhaustion.
+File Locking: Uses flock (LOCK_EX) on a dedicated .perlfs_journal.lock file to ensure that multiple instances of the script don't corrupt the journal.
+
+D. Development & Testing Tools
+Interactive Test Harness: Includes a CLI sandbox (--test) that allows developers to simulate filesystem commands (ls, echo, touch, rm) without mounting the driver to the kernel.
+Verbose Debugging: A _log utility provides real-time visibility into the translation of virtual paths to real paths.
+
+3. Supported Operations
+File Ops: create, open, read, write, truncate, unlink, rename.
+Directory Ops: mkdir, rmdir, readdir.
+Metadata Ops: getattr (stat), chmod, utime, statfs.
+Lifecycle Ops: flush, release.
+
+4. Technical Constraints
+Single-Threaded: Set to threaded => 0 to avoid race conditions during Perl's internal processing.
+Permissions: Defaults to the UID/GID of the user running the script. chown is explicitly disabled (ENOSYS) for security reasons in this implementation.
